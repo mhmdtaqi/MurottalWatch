@@ -2,16 +2,14 @@ import { useState, FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { BookOpen, Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 
-const DEMO_CREDENTIALS = [
-  { username: "admin", password: "admin123", role: "Administrator" },
-  { username: "guru", password: "guru123", role: "Guru Tilawah" },
-  { username: "siswa", password: "siswa123", role: "Siswa" },
-];
-// credentials kept for auth logic only — UI hints removed
+// 1. IMPORT SUPABASE CLIENT
+import { supabase } from "./supabaseClient"; 
+import React from "react";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -21,27 +19,55 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!username.trim() || !password.trim()) {
-      setError("Username dan password harus diisi.");
+    if (!email.trim() || !password.trim()) {
+      setError("Email dan password harus diisi.");
       return;
     }
 
     setLoading(true);
-    // Simulate network delay
-    await new Promise((r) => setTimeout(r, 800));
 
-    const match = DEMO_CREDENTIALS.find(
-      (c) => c.username === username && c.password === password
-    );
+    // 2. PROSES LOGIN EMAIL & PASSWORD
+    const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
 
-    if (match) {
-      sessionStorage.setItem("auth", "true");
-      sessionStorage.setItem("username", match.username);
-      sessionStorage.setItem("role", match.role);
-      navigate("/record", { replace: true });
-    } else {
-      setError("Username atau password salah. Silakan coba lagi.");
+    if (supabaseError) {
+      setError(
+        supabaseError.message === "Invalid login credentials" 
+          ? "Email atau password salah. Silakan coba lagi." 
+          : supabaseError.message
+      );
       setLoading(false);
+    } else if (data.user) {
+      
+      // 3. JIKA LOGIN SUKSES, TARIK DATA PROFIL (NAMA & ROLE) DARI DATABASE
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', data.user.id)
+        .single(); // Ambil 1 baris data saja
+
+      if (profileError) {
+        console.error("Gagal mengambil data profil:", profileError.message);
+        setError("Profil tidak ditemukan. Hubungi administrator.");
+        setLoading(false);
+        return; // Hentikan proses jika profil tidak ada
+      }
+
+      // 4. SIMPAN DATA KE SESSION BROWSER
+      sessionStorage.setItem("auth", "true");
+      sessionStorage.setItem("email", data.user.email || "");
+      sessionStorage.setItem("username", profileData.full_name); // Menggunakan nama asli dari database
+      sessionStorage.setItem("role", profileData.role); 
+      
+      // 5. PENGALIHAN HALAMAN (ROUTING) BERDASARKAN ROLE
+      if (profileData.role === "Guru") {
+        navigate("/guru", { replace: true });
+      } else {
+        // Jika Siswa, arahkan ke halaman rekam
+        navigate("/record", { replace: true });
+      }
     }
   };
 
@@ -152,22 +178,22 @@ export default function LoginPage() {
             <div className="mb-6">
               <h2 className="text-2xl font-bold mb-1" style={{ color: "#f0ede6" }}>Masuk ke Akun</h2>
               <p className="text-sm" style={{ color: "#8aab9e" }}>
-                Gunakan kredensial yang diberikan oleh administrator.
+                Gunakan kredensial yang didaftarkan di sistem.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              {/* Username */}
+              {/* Email */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-semibold" style={{ color: "#c9a84c" }}>
-                  Username
+                  Email
                 </label>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Masukkan username"
-                  autoComplete="username"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Masukkan email"
+                  autoComplete="email"
                   className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
                   style={{
                     background: "rgba(201,168,76,0.06)",

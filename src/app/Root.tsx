@@ -1,4 +1,5 @@
 import { Outlet, Navigate } from "react-router";
+import React from "react";
 
 // Simple in-memory auth check — replace with real auth later
 export function isAuthenticated(): boolean {

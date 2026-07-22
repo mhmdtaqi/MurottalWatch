@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Video, Square, RotateCcw, Download, AlertCircle, Mic, Shield, MonitorSmartphone, LogOut, UserCircle } from "lucide-react";
+import { Video, Square, RotateCcw, Download, Send, AlertCircle, Mic, Shield, MonitorSmartphone, LogOut, UserCircle, CheckCircle } from "lucide-react";
+import { supabase } from "./supabaseClient"; // Pastikan path ini benar
+import React from "react";
 
 type RecordingState = "idle" | "recording" | "stopped";
 type PermissionState = "prompt" | "requesting" | "granted" | "denied";
@@ -22,6 +24,10 @@ export default function RecordPage() {
   const [videoURL, setVideoURL] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  
+  // State baru untuk proses upload ke Supabase
+  const [sent, setSent] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleLogout = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -99,6 +105,7 @@ export default function RecordPage() {
     if (!streamRef.current) return;
     chunksRef.current = [];
     setVideoURL(null);
+    setSent(false);
     const recorder = new MediaRecorder(streamRef.current, {
       mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm",
     });
@@ -124,6 +131,7 @@ export default function RecordPage() {
     setRecordingState("idle");
     setElapsed(0);
     setVideoURL(null);
+    setSent(false);
     startCamera();
   }, [startCamera]);
 
@@ -140,6 +148,53 @@ export default function RecordPage() {
     a.download = `rekaman-quran-${Date.now()}.webm`;
     a.click();
   };
+
+  // Fungsi untuk mengirim ke Supabase
+  const sendToGuru = useCallback(async () => {
+    if (!videoURL || chunksRef.current.length === 0) return;
+    
+    setIsUploading(true);
+
+    try {
+      const videoBlob = new Blob(chunksRef.current, { type: "video/webm" });
+      const safeUsername = username.replace(/\s+/g, '_');
+      const fileName = `${Date.now()}_${safeUsername}.webm`;
+      const filePath = `setoran/${fileName}`;
+
+      // Upload ke Storage
+      const { error: uploadError } = await supabase.storage
+        .from("murottal-videos")
+        .upload(filePath, videoBlob, { contentType: "video/webm" });
+
+      if (uploadError) throw uploadError;
+
+      // Ambil Public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("murottal-videos")
+        .getPublicUrl(filePath);
+
+      // Simpan ke Database
+      const { error: dbError } = await supabase
+        .from("recordings")
+        .insert([{
+          student_name: username,
+          username: username,
+          surah: "Tilawah Bebas",
+          duration: elapsed,
+          video_url: publicUrlData.publicUrl,
+          status: "baru"
+        }]);
+
+      if (dbError) throw dbError;
+
+      setSent(true);
+    } catch (error: any) {
+      console.error("Gagal mengirim:", error.message);
+      alert("Gagal mengirim rekaman: " + error.message);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [videoURL, username, elapsed]);
 
   // ── Permission screen ──────────────────────────────────────────────
   if (permissionState === "prompt" || permissionState === "requesting" || permissionState === "denied") {
@@ -491,7 +546,9 @@ export default function RecordPage() {
                 style={{ background: "rgba(46,139,87,0.1)", border: "1px solid rgba(46,139,87,0.25)" }}
               >
                 <p className="text-sm font-medium" style={{ color: "#4caf87" }}>
-                  ✓ Rekaman selesai dengan durasi {formatTime(elapsed)}. Anda dapat memutar, mengunduh, atau merekam ulang.
+                  {sent
+                    ? "✓ Rekaman telah berhasil dikirim ke guru."
+                    : `✓ Rekaman selesai dengan durasi ${formatTime(elapsed)}.`}
                 </p>
               </div>
             )}
@@ -549,17 +606,46 @@ export default function RecordPage() {
 
             {recordingState === "stopped" && (
               <>
+                {sent ? (
+                  <div
+                    className="w-full py-4 rounded-2xl flex items-center justify-center gap-3"
+                    style={{ background: "rgba(76,175,135,0.12)", border: "1.5px solid rgba(76,175,135,0.3)" }}
+                  >
+                    <CheckCircle size={18} style={{ color: "#4caf87" }} />
+                    <span className="font-bold text-base" style={{ color: "#4caf87" }}>Berhasil Dikirim ke Guru</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={sendToGuru}
+                    disabled={isUploading}
+                    className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+                    style={{
+                      background: "linear-gradient(135deg, #d4a843 0%, #b8892e 100%)",
+                      color: "#0b1f1a",
+                      boxShadow: "0 4px 24px rgba(201,168,76,0.3)",
+                      opacity: isUploading ? 0.7 : 1,
+                      cursor: isUploading ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isUploading ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: "#0b1f1a", borderTopColor: "transparent" }} />
+                        Mengunggah...
+                      </>
+                    ) : (
+                      <><Send size={18} />Kirim ke Guru</>
+                    )}
+                  </button>
+                )}
+                
                 <button
                   onClick={downloadVideo}
-                  className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-                  style={{
-                    background: "linear-gradient(135deg, #d4a843 0%, #b8892e 100%)",
-                    color: "#0b1f1a",
-                    boxShadow: "0 4px 24px rgba(201,168,76,0.3)",
-                  }}
+                  className="w-full py-3.5 rounded-2xl font-semibold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+                  style={{ background: "rgba(201,168,76,0.08)", color: "#c9a84c", border: "1.5px solid rgba(201,168,76,0.3)" }}
                 >
-                  <Download size={18} />Unduh Rekaman
+                  <Download size={16} />Unduh Rekaman (Opsional)
                 </button>
+                
                 <button
                   onClick={reset}
                   className="w-full py-3.5 rounded-2xl font-semibold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
