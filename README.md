@@ -1,9 +1,3 @@
-Halo! Tentu, saya akan membantu Anda menyusun *draft* README.md yang profesional, rapi, dan komprehensif untuk dipajang di repositori GitHub Anda.
-
-Berikut adalah kode Markdown untuk README proyek Murottal Watch berdasarkan seluruh spesifikasi dan arsitektur yang telah kita rancang. Anda bisa langsung menyalinnya ke dalam file `README.md` di proyek Anda.
-
----
-
 # 📖 Murottal Watch - Aplikasi Pemantauan Murotal Siswa
 
 Aplikasi berbasis web *mobile-first* yang berfungsi untuk memantau, merekam secara *live*, dan menilai setoran murotal Al-Qur'an siswa secara praktis. Sistem ini dirancang untuk menampung skala pengguna tingkat menengah (sekitar 300 siswa beserta guru penilai) dengan mengutamakan efisiensi penyimpanan dan kemudahan antarmuka.
